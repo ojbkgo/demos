@@ -17,4 +17,8 @@ type NetTool interface {
 	DelRoute(net string, gw string) error
 	// UninstallTun uninstall tun
 	UninstallTun(name string) error
+	// AddSnat add snat
+	AddSnat(srcNet string) error
+	// DelSnat del snat
+	DelSnat(src string) error
 }

@@ -64,6 +64,26 @@ func main() {
 
 	fmt.Println("dial udp success....")
 
+	go func() {
+
+		for {
+			buffer := make([]byte, 1500)
+			readSize, _, err := conn.ReadFromUDP(buffer)
+			if err != nil {
+				fmt.Println("Error reading from udp:", err)
+			}
+
+			fmt.Println("Read from udp success.... size:", readSize)
+			_, err = ifce.Write(buffer[:readSize])
+			if err != nil {
+				fmt.Println("Error writing to tun device:", err)
+			} else {
+				fmt.Println("Write to tun device success....")
+			}
+		}
+
+	}()
+
 	for {
 		buffer := make([]byte, 1500)
 		n, err := ifce.Read(buffer)
@@ -91,5 +111,6 @@ func main() {
 		}
 
 		fmt.Println("Write to udp success.... size:", size)
+
 	}
 }

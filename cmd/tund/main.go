@@ -1,11 +1,8 @@
 package main
 
 import (
-	"encoding/binary"
 	"fmt"
 	"net"
-
-	"golang.org/x/net/ipv4"
 
 	"github.com/ojbkgo/demos/pkg/protocol"
 	"github.com/ojbkgo/demos/pkg/utils/nettool"
@@ -19,7 +16,7 @@ func main() {
 		return
 	}
 
-	netTool := nettool.NewMacNetTool()
+	netTool := nettool.NewLinuxNetTool()
 	ifce, err := netTool.CreateTun("tun99")
 	if err != nil {
 		fmt.Println("Error creating tun device:", err)
@@ -27,9 +24,28 @@ func main() {
 	}
 	defer ifce.Close()
 
+	err = netTool.SetTunNetIP(ifce.Name(), "11.11.0.1", "255.255.255.0")
+	if err != nil {
+		fmt.Println("Error setting tun net IP:", err)
+		return
+	}
+
 	err = netTool.SetTunUp(ifce.Name())
 	if err != nil {
 		fmt.Println("Error setting tun up:", err)
+		return
+	}
+
+	// add route
+	err = netTool.AddRoute("192.168.0.0/24", "11.11.0.2")
+	if err != nil {
+		fmt.Println("Error adding route:", err)
+		return
+	}
+
+	err = netTool.AddSnat("192.168.0.0/24")
+	if err != nil {
+		fmt.Println("Error adding snat:", err)
 		return
 	}
 
@@ -54,53 +70,79 @@ func main() {
 			panic(err)
 		}
 
-		// p.Payload 是一个ip包，  解析出ip包的源ip和目的ip， 打印出来
-		ipHeader, err := ipv4.ParseHeader(p.Payload)
-		if err != nil {
-			panic(err)
-		}
+		// p.Payload 是一个ip包, 解析出ip包的源ip和目的ip， 打印出来
+		//ipHeader, err := ipv4.ParseHeader(p.Payload)
+		//if err != nil {
+		//	panic(err)
+		//}
 
-		fmt.Println(ipHeader.Checksum)
-		fmt.Println(checksum(p.Payload[0:20]))
+		//fmt.Println(ipHeader.Checksum)
+		//fmt.Println(checksum(p.Payload[0:20]))
 
 		// 获取本机ip
-		ifceLocal, err := net.InterfaceByName("eth0")
-		if err != nil {
-			panic(err)
-		}
+		//ifceLocal, err := net.InterfaceByName("eth0")
+		//if err != nil {
+		//	panic(err)
+		//}
 
-		addrs, err := ifceLocal.Addrs()
-		if err != nil {
-			panic(err)
-		}
+		//addrs, err := ifceLocal.Addrs()
+		//if err != nil {
+		//	panic(err)
+		//}
 
-		var localIp string
-		for _, addr := range addrs {
-			ip, _, err := net.ParseCIDR(addr.String())
-			if err != nil {
-				panic(err)
-			}
-			if ip.To4() != nil {
-				localIp = ip.String()
-				break
-			}
-		}
+		//var localIp string
+		//for _, addr := range addrs {
+		//	ip, _, err := net.ParseCIDR(addr.String())
+		//	if err != nil {
+		//		panic(err)
+		//	}
+		//	if ip.To4() != nil {
+		//		localIp = ip.String()
+		//		break
+		//	}
+		//}
 
-		fmt.Println(localIp)
+		//fmt.Println(localIp)
 
-		// 修改 p.Payload 源ip
-		copy(p.Payload[12:16], net.ParseIP(localIp).To4())
-		// 重新计算ip包 crc校验和
-		sum := checksum(p.Payload[0:20])
-		p.Payload[10] = byte(sum >> 8)
-		p.Payload[11] = byte(sum)
+		//// 修改 p.Payload 源ip
+		//copy(p.Payload[12:16], net.ParseIP(localIp).To4())
+		//// 重新计算ip包 crc校验和
+		//sum := checksum(p.Payload[0:20])
+		//p.Payload[10] = byte(sum >> 8)
+		//p.Payload[11] = byte(sum)
 
 		if _, ok := remoteMap[p.SrcIp]; !ok {
 			remoteMap[p.SrcIp] = remoteUdpAddr
+
+			go func() {
+				fmt.Println("Reading response package from tun device....")
+				for {
+					resp := make([]byte, 1500)
+					readSize, err := ifce.Read(resp)
+					if err != nil {
+						fmt.Println("Error reading from tun device:", err)
+						return
+					} else {
+						fmt.Println("Read from tun device:", readSize)
+					}
+
+					fmt.Println(remoteUdpAddr.String())
+
+					writeSize, err := conn.WriteToUDP(resp[:readSize], remoteUdpAddr)
+					if err != nil {
+						fmt.Println("Error writing to udp:", err)
+						return
+					} else {
+						fmt.Println("Write to udp success.... size:", writeSize)
+					}
+
+				}
+
+			}()
 		}
 
-		fmt.Println(binary.BigEndian.Uint16(p.Payload[10:12]))
-		fmt.Println(sum)
+		//fmt.Println(binary.BigEndian.Uint16(p.Payload[10:12]))
+		//fmt.Println(sum)
 
 		size, err := ifce.Write(p.Payload)
 		if err != nil {
@@ -109,15 +151,13 @@ func main() {
 		} else {
 			fmt.Println("Write to tun device:", size)
 		}
+	}
 
-		resp := make([]byte, 1500)
-		readSize, err := ifce.Read(resp)
-		if err != nil {
-			fmt.Println("Error reading from tun device:", err)
-			return
-		} else {
-			fmt.Println("Read from tun device:", readSize)
-		}
+	err = netTool.DelSnat("192.168.0.0/24")
+	if err != nil {
+		fmt.Println("Error deleting snat:", err)
+	} else {
+		fmt.Println("Delete snat success....")
 	}
 }
 

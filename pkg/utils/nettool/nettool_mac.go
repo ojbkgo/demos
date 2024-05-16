@@ -85,3 +85,29 @@ func (m *macNetTool) UninstallTun(name string) error {
 
 	return nil
 }
+
+func (m *macNetTool) AddSnat(srcNet string) error {
+	_, err := exec.Command("echo", "1", ">", "/proc/sys/net/ipv4/ip_forward").Output()
+	if err != nil {
+		fmt.Println("Error enabling ip forward:", err)
+		return err
+	}
+
+	_, err = exec.Command("iptables", "-t", "nat", "-A", "POSTROUTING", "-s", srcNet, "-j", "MASQUERADE").Output()
+	if err != nil {
+		fmt.Println("Error adding snat:", err)
+		return err
+	}
+
+	return nil
+}
+
+func (m *macNetTool) DelSnat(srcNet string) error {
+	_, err := exec.Command("iptables", "-t", "nat", "-D", "POSTROUTING", "-s", srcNet, "-j", "MASQUERADE").Output()
+	if err != nil {
+		fmt.Println("Error deleting snat:", err)
+		return err
+	}
+
+	return nil
+}

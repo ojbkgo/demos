@@ -13,7 +13,7 @@ func NewLinuxNetTool() *linuxNetTool {
 	return &linuxNetTool{}
 }
 
-func (l *linuxNetTool) CreateTun(name string) error {
+func (l *linuxNetTool) CreateTun(name string) (*water.Interface, error) {
 	config := water.Config{
 		DeviceType: water.TUN,
 	}
@@ -22,11 +22,10 @@ func (l *linuxNetTool) CreateTun(name string) error {
 	ifce, err := water.New(config)
 	if err != nil {
 		fmt.Println("Error creating tun device:", err)
-		return err
+		return nil, err
 	}
-	_ = ifce.Close()
 
-	return nil
+	return ifce, nil
 }
 
 func (l *linuxNetTool) SetTunNetIP(name string, ip, mask string) error {
@@ -82,5 +81,23 @@ func (l *linuxNetTool) UninstallTun(name string) error {
 		return err
 	}
 
+	return nil
+}
+
+func (l *linuxNetTool) AddSnat(srcNet string) error {
+	_, err := exec.Command("iptables", "-t", "nat", "-A", "POSTROUTING", "-s", srcNet, "-j", "MASQUERADE").Output()
+	if err != nil {
+		fmt.Println("Error adding snat:", err)
+		return err
+	}
+	return nil
+}
+
+func (l *linuxNetTool) DelSnat(srcNet string) error {
+	_, err := exec.Command("iptables", "-t", "nat", "-D", "POSTROUTING", "-s", srcNet, "-j", "MASQUERADE").Output()
+	if err != nil {
+		fmt.Println("Error deleting snat:", err)
+		return err
+	}
 	return nil
 }
